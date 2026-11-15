@@ -7,6 +7,7 @@ import pytest
 from pytest_homeassistant.common import MockConfigEntry
 from requests.exceptions import (
     ConnectionError as RequestsConnectionError,
+    InvalidURL,
     Timeout as RequestsTimeout,
 )
 
@@ -20,6 +21,7 @@ from homeassistant.const import (
     CONF_COMMAND_OFF,
     CONF_COMMAND_ON,
     CONF_HOST,
+    CONF_MONITORED_CONDITIONS,
     CONF_PASSWORD,
     CONF_PATH,
     CONF_SSL,
@@ -92,6 +94,9 @@ async def test_setup_https(
         ),
         pytest.param(
             RequestsTimeout, True, None, ConfigEntryState.SETUP_RETRY, id="timeout"
+        ),
+        pytest.param(
+            InvalidURL, True, None, ConfigEntryState.SETUP_ERROR, id="invalid_url"
         ),
         pytest.param(None, False, None, ConfigEntryState.SETUP_ERROR, id="bad_auth"),
         pytest.param(None, True, [], ConfigEntryState.SETUP_RETRY, id="no_monitors"),
@@ -195,6 +200,24 @@ async def test_yaml_import_platform_options(
     assert entry.options == expected_options
 
 
+@pytest.mark.usefixtures("mock_zoneminder_client")
+async def test_yaml_import_monitored_conditions(hass: HomeAssistant) -> None:
+    """Test the YAML sensor monitored_conditions are kept in the entry data."""
+    config = {
+        **YAML_CONFIG,
+        "sensor": [{"platform": DOMAIN, CONF_MONITORED_CONDITIONS: ["hour", "day"]}],
+    }
+    assert await async_setup_component(hass, DOMAIN, config)
+    await hass.async_block_till_done()
+
+    entry = hass.config_entries.async_entries(DOMAIN)[0]
+    assert entry.data == {
+        **MOCK_CONFIG_DATA,
+        CONF_MONITORED_CONDITIONS: ["hour", "day"],
+    }
+    assert entry.options == MOCK_OPTIONS
+
+
 @pytest.mark.parametrize(
     ("side_effect", "login", "issue_id"),
     [
@@ -225,7 +248,13 @@ async def test_yaml_import_failure(
     await hass.async_block_till_done()
 
     assert not hass.config_entries.async_entries(DOMAIN)
-    assert issue_registry.async_get_issue(DOMAIN, issue_id)
+    assert (issue := issue_registry.async_get_issue(DOMAIN, f"{issue_id}_{MOCK_HOST}"))
+    assert issue.translation_key == issue_id
+    assert issue.translation_placeholders == {
+        "domain": DOMAIN,
+        "host": MOCK_HOST,
+        "integration_title": "ZoneMinder",
+    }
     assert not issue_registry.async_get_issue(
         HOMEASSISTANT_DOMAIN, f"deprecated_yaml_{DOMAIN}"
     )
@@ -246,4 +275,48 @@ async def test_yaml_import_already_configured(
     assert len(hass.config_entries.async_entries(DOMAIN)) == 1
     assert issue_registry.async_get_issue(
         HOMEASSISTANT_DOMAIN, f"deprecated_yaml_{DOMAIN}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("platform", "platform_config"),
+    [
+        pytest.param(
+            Platform.SENSOR,
+            {"platform": DOMAIN, CONF_INCLUDE_ARCHIVED: True},
+            id="sensor",
+        ),
+        pytest.param(
+            Platform.SWITCH,
+            {
+                "platform": DOMAIN,
+                CONF_COMMAND_ON: "Modect",
+                CONF_COMMAND_OFF: "Monitor",
+            },
+            id="switch",
+        ),
+        pytest.param(Platform.CAMERA, {"platform": DOMAIN}, id="camera"),
+    ],
+)
+@pytest.mark.usefixtures("mock_zoneminder_client")
+async def test_yaml_platform_issue(
+    hass: HomeAssistant,
+    issue_registry: ir.IssueRegistry,
+    platform: Platform,
+    platform_config: dict[str, Any],
+) -> None:
+    """Test a leftover YAML platform section raises a ZoneMinder issue."""
+    assert await async_setup_component(
+        hass, platform, {**YAML_CONFIG, platform: [platform_config]}
+    )
+    await hass.async_block_till_done()
+
+    assert (
+        issue := issue_registry.async_get_issue(
+            DOMAIN, f"deprecated_yaml_platform_{platform}"
+        )
+    )
+    assert issue.translation_placeholders == {"domain": DOMAIN, "platform": platform}
+    assert not issue_registry.async_get_issue(
+        HOMEASSISTANT_DOMAIN, f"platform_integration_no_support_{platform}_{DOMAIN}"
     )

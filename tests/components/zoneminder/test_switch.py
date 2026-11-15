@@ -41,7 +41,7 @@ async def _poll(hass: HomeAssistant, freezer: FrozenDateTimeFactory) -> None:
     await hass.async_block_till_done(wait_background_tasks=True)
 
 
-@pytest.mark.usefixtures("mock_zoneminder_client")
+@pytest.mark.usefixtures("mock_zoneminder_client", "entity_registry_enabled_by_default")
 async def test_entities(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,
@@ -56,6 +56,20 @@ async def test_entities(
     await snapshot_platform(hass, entity_registry, snapshot, mock_config_entry.entry_id)
 
 
+@pytest.mark.usefixtures("mock_zoneminder_client")
+async def test_switch_disabled_by_default(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    entity_registry: er.EntityRegistry,
+) -> None:
+    """Test the switches are disabled by default."""
+    await setup_integration(hass, mock_config_entry, [Platform.SWITCH])
+
+    assert (entity_entry := entity_registry.async_get(ENTITY_ID))
+    assert entity_entry.disabled_by is er.RegistryEntryDisabler.INTEGRATION
+
+
+@pytest.mark.usefixtures("entity_registry_enabled_by_default")
 async def test_switch_follows_server_change(
     hass: HomeAssistant,
     mock_zoneminder_client: MagicMock,
@@ -102,6 +116,7 @@ async def test_switch_follows_server_change(
         ),
     ],
 )
+@pytest.mark.usefixtures("entity_registry_enabled_by_default")
 async def test_switch_services(
     hass: HomeAssistant,
     mock_zoneminder_client: MagicMock,
@@ -125,6 +140,7 @@ async def test_switch_services(
     assert monitor.function == expected
 
 
+@pytest.mark.usefixtures("entity_registry_enabled_by_default")
 async def test_switch_off_when_function_differs(
     hass: HomeAssistant,
     mock_zoneminder_client: MagicMock,

@@ -5,12 +5,27 @@ import logging
 from zoneminder.monitor import Monitor
 
 from homeassistant.components.mjpeg import MjpegCamera, filter_urllib3_logging
+from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.entity_platform import (
+    AddConfigEntryEntitiesCallback,
+    AddEntitiesCallback,
+)
+from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
-from . import ZoneMinderConfigEntry
+from . import ZoneMinderConfigEntry, async_create_platform_yaml_issue
 
 _LOGGER = logging.getLogger(__name__)
+
+
+async def async_setup_platform(
+    hass: HomeAssistant,
+    config: ConfigType,
+    async_add_entities: AddEntitiesCallback,
+    discovery_info: DiscoveryInfoType | None = None,
+) -> None:
+    """Raise an issue for a leftover YAML platform section."""
+    async_create_platform_yaml_issue(hass, Platform.CAMERA)
 
 
 async def async_setup_entry(

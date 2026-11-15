@@ -5,12 +5,26 @@ from typing import Any, override
 from zoneminder.monitor import Monitor, MonitorState
 
 from homeassistant.components.switch import SwitchEntity
-from homeassistant.const import CONF_COMMAND_OFF, CONF_COMMAND_ON
+from homeassistant.const import CONF_COMMAND_OFF, CONF_COMMAND_ON, Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.entity_platform import (
+    AddConfigEntryEntitiesCallback,
+    AddEntitiesCallback,
+)
+from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
-from . import ZoneMinderConfigEntry
+from . import ZoneMinderConfigEntry, async_create_platform_yaml_issue
 from .const import MONITOR_FUNCTIONS
+
+
+async def async_setup_platform(
+    hass: HomeAssistant,
+    config: ConfigType,
+    async_add_entities: AddEntitiesCallback,
+    discovery_info: DiscoveryInfoType | None = None,
+) -> None:
+    """Raise an issue for a leftover YAML platform section."""
+    async_create_platform_yaml_issue(hass, Platform.SWITCH)
 
 
 async def async_setup_entry(
@@ -30,6 +44,7 @@ async def async_setup_entry(
 class ZMSwitchMonitors(SwitchEntity):
     """Representation of a ZoneMinder switch."""
 
+    _attr_entity_registry_enabled_default = False
     icon = "mdi:record-rec"
 
     def __init__(

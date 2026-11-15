@@ -7,9 +7,11 @@ from typing import Any
 import probatio
 from requests.exceptions import (
     ConnectionError as RequestsConnectionError,
+    RequestException,
     Timeout as RequestsTimeout,
 )
-from zoneminder.monitor import Monitor, MonitorState
+from yarl import URL
+from zoneminder.monitor import Monitor, MonitorState, TimePeriod
 from zoneminder.zm import ZoneMinder
 
 from homeassistant.config import config_per_platform
@@ -18,6 +20,7 @@ from homeassistant.const import (
     CONF_COMMAND_OFF,
     CONF_COMMAND_ON,
     CONF_HOST,
+    CONF_MONITORED_CONDITIONS,
     CONF_PASSWORD,
     CONF_PATH,
     CONF_SSL,
@@ -25,7 +28,7 @@ from homeassistant.const import (
     CONF_VERIFY_SSL,
     Platform,
 )
-from homeassistant.core import DOMAIN as HOMEASSISTANT_DOMAIN, HomeAssistant
+from homeassistant.core import DOMAIN as HOMEASSISTANT_DOMAIN, HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.exceptions import ConfigEntryError, ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv
@@ -71,7 +74,13 @@ CONFIG_SCHEMA = probatio.Schema(
 
 # The sensor and switch platform sections are not validated by their platforms
 SENSOR_IMPORT_SCHEMA = probatio.Schema(
-    {probatio.Optional(CONF_INCLUDE_ARCHIVED): cv.boolean},
+    {
+        probatio.Optional(CONF_INCLUDE_ARCHIVED): cv.boolean,
+        probatio.Optional(CONF_MONITORED_CONDITIONS): probatio.All(
+            probatio.EnsureList(),
+            [probatio.In([period.period for period in TimePeriod])],
+        ),
+    },
     extra=probatio.ALLOW_EXTRA,
 )
 SWITCH_IMPORT_SCHEMA = probatio.Schema(
@@ -131,6 +140,10 @@ def _platform_options(config: ConfigType) -> dict[str, Any]:
                 continue
             if CONF_INCLUDE_ARCHIVED in validated:
                 options[CONF_INCLUDE_ARCHIVED] = validated[CONF_INCLUDE_ARCHIVED]
+            if CONF_MONITORED_CONDITIONS in validated:
+                options[CONF_MONITORED_CONDITIONS] = validated[
+                    CONF_MONITORED_CONDITIONS
+                ]
             for key in (CONF_COMMAND_ON, CONF_COMMAND_OFF):
                 if key in validated:
                     options[key] = validated[key].lower()
@@ -147,10 +160,11 @@ async def _async_import(hass: HomeAssistant, import_data: dict[str, Any]) -> Non
         result["type"] is FlowResultType.ABORT
         and (reason := result["reason"]) != "already_configured"
     ):
+        host = import_data[CONF_HOST]
         async_create_issue(
             hass,
             DOMAIN,
-            f"deprecated_yaml_import_issue_{reason}",
+            f"deprecated_yaml_import_issue_{reason}_{host}",
             breaks_in_ha_version="2027.6.0",
             is_fixable=False,
             issue_domain=DOMAIN,
@@ -158,6 +172,7 @@ async def _async_import(hass: HomeAssistant, import_data: dict[str, Any]) -> Non
             translation_key=f"deprecated_yaml_import_issue_{reason}",
             translation_placeholders={
                 "domain": DOMAIN,
+                "host": host,
                 "integration_title": "ZoneMinder",
             },
         )
@@ -179,11 +194,29 @@ async def _async_import(hass: HomeAssistant, import_data: dict[str, Any]) -> Non
     )
 
 
+@callback
+def async_create_platform_yaml_issue(hass: HomeAssistant, platform: Platform) -> None:
+    """Raise an issue for a leftover ZoneMinder platform section in YAML."""
+    async_create_issue(
+        hass,
+        DOMAIN,
+        f"deprecated_yaml_platform_{platform}",
+        breaks_in_ha_version="2027.6.0",
+        is_fixable=False,
+        issue_domain=DOMAIN,
+        severity=IssueSeverity.WARNING,
+        translation_key="deprecated_yaml_platform",
+        translation_placeholders={"domain": DOMAIN, "platform": platform},
+    )
+
+
 def create_client(data: dict[str, Any]) -> ZoneMinder:
     """Create a ZoneMinder client from config entry data."""
-    protocol = "https" if data[CONF_SSL] else "http"
+    server_origin = URL.build(
+        scheme="https" if data[CONF_SSL] else "http", authority=data[CONF_HOST]
+    )
     return ZoneMinder(
-        f"{protocol}://{data[CONF_HOST]}",
+        str(server_origin),
         data.get(CONF_USERNAME),
         data.get(CONF_PASSWORD),
         data[CONF_PATH],
@@ -201,6 +234,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ZoneMinderConfigEntry) -
     except (RequestsConnectionError, RequestsTimeout) as err:
         raise ConfigEntryNotReady(
             f"Unable to connect to ZoneMinder at {entry.data[CONF_HOST]}"
+        ) from err
+    except RequestException as err:
+        raise ConfigEntryError(
+            f"Invalid request to ZoneMinder at {entry.data[CONF_HOST]}"
         ) from err
 
     if not logged_in:

@@ -7,6 +7,7 @@ import pytest
 from pytest_homeassistant.common import MockConfigEntry
 from requests.exceptions import (
     ConnectionError as RequestsConnectionError,
+    InvalidURL,
     Timeout as RequestsTimeout,
 )
 
@@ -90,6 +91,7 @@ async def test_user_flow_without_auth(
     [
         pytest.param(RequestsConnectionError, True, "cannot_connect", id="refused"),
         pytest.param(RequestsTimeout, True, "cannot_connect", id="timeout"),
+        pytest.param(InvalidURL, True, "cannot_connect", id="invalid_url"),
         pytest.param(None, False, "invalid_auth", id="invalid_auth"),
         pytest.param(RuntimeError, True, "unknown", id="unknown"),
     ],
@@ -121,6 +123,71 @@ async def test_user_flow_errors(
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], MOCK_CONFIG_DATA
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.parametrize(
+    ("host", "expected_host", "expected_ssl", "server_origin"),
+    [
+        pytest.param(
+            f"http://{MOCK_HOST}", MOCK_HOST, False, f"http://{MOCK_HOST}", id="http"
+        ),
+        pytest.param(
+            f"https://{MOCK_HOST}:8443/zm/",
+            f"{MOCK_HOST}:8443",
+            True,
+            f"https://{MOCK_HOST}:8443",
+            id="https_with_port",
+        ),
+        pytest.param(
+            f"{MOCK_HOST}:8080",
+            f"{MOCK_HOST}:8080",
+            False,
+            f"http://{MOCK_HOST}:8080",
+            id="no_scheme_with_port",
+        ),
+    ],
+)
+@pytest.mark.usefixtures("mock_setup_entry")
+async def test_user_flow_host_scheme(
+    hass: HomeAssistant,
+    mock_zoneminder_client: MagicMock,
+    host: str,
+    expected_host: str,
+    expected_ssl: bool,
+    server_origin: str,
+) -> None:
+    """Test a URL scheme entered in the host field sets the SSL option."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_HOST: host}
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_HOST] == expected_host
+    assert result["data"][CONF_SSL] is expected_ssl
+    assert mock_zoneminder_client.mock_cls.call_args.args[0] == server_origin
+
+
+@pytest.mark.usefixtures("mock_setup_entry", "mock_zoneminder_client")
+async def test_user_flow_invalid_port(hass: HomeAssistant) -> None:
+    """Test a host with an invalid port shows an error."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_HOST: f"{MOCK_HOST}:abc"}
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "unknown"}
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_HOST: MOCK_HOST}
     )
 
     assert result["type"] is FlowResultType.CREATE_ENTRY

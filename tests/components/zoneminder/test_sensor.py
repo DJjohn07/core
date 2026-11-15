@@ -1,6 +1,7 @@
 """Tests for ZoneMinder sensor entities."""
 
 from datetime import timedelta
+from typing import Any
 from unittest.mock import MagicMock, PropertyMock
 
 from freezegun.api import FrozenDateTimeFactory
@@ -14,7 +15,12 @@ from syrupy.assertion import SnapshotAssertion
 from zoneminder.monitor import MonitorState, TimePeriod
 
 from homeassistant.components.zoneminder.const import CONF_INCLUDE_ARCHIVED, DOMAIN
-from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN, Platform
+from homeassistant.const import (
+    CONF_MONITORED_CONDITIONS,
+    STATE_UNAVAILABLE,
+    STATE_UNKNOWN,
+    Platform,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
@@ -47,23 +53,45 @@ async def test_entities(
     await snapshot_platform(hass, entity_registry, snapshot, mock_config_entry.entry_id)
 
 
+@pytest.mark.parametrize(
+    ("data", "expected_enabled"),
+    [
+        pytest.param(
+            MOCK_CONFIG_DATA,
+            {STATUS_ENTITY_ID, "sensor.front_door_events"},
+            id="default",
+        ),
+        pytest.param(
+            {**MOCK_CONFIG_DATA, CONF_MONITORED_CONDITIONS: ["hour", "week"]},
+            {
+                STATUS_ENTITY_ID,
+                "sensor.front_door_events_last_hour",
+                "sensor.front_door_events_last_week",
+            },
+            id="imported_monitored_conditions",
+        ),
+    ],
+)
 @pytest.mark.usefixtures("mock_zoneminder_client")
-async def test_event_sensors_disabled_by_default(
+async def test_event_sensors_enabled_by_default(
     hass: HomeAssistant,
-    mock_config_entry: MockConfigEntry,
     entity_registry: er.EntityRegistry,
+    data: dict[str, Any],
+    expected_enabled: set[str],
 ) -> None:
-    """Test only the all-time event sensor is enabled by default."""
-    await setup_integration(hass, mock_config_entry, [Platform.SENSOR])
+    """Test which event sensors are enabled by default."""
+    entry = MockConfigEntry(domain=DOMAIN, data=data, options=MOCK_OPTIONS)
+    await setup_integration(hass, entry, [Platform.SENSOR])
 
     enabled = {
-        entry.entity_id
-        for entry in er.async_entries_for_config_entry(
-            entity_registry, mock_config_entry.entry_id
+        entity_entry.entity_id
+        for entity_entry in er.async_entries_for_config_entry(
+            entity_registry, entry.entry_id
         )
-        if entry.entity_id.startswith("sensor.front_door_") and not entry.disabled
+        if entity_entry.entity_id.startswith("sensor.front_door_")
+        and not entity_entry.disabled
     }
-    assert enabled == {STATUS_ENTITY_ID, "sensor.front_door_events"}
+    assert enabled == expected_enabled
 
 
 @pytest.mark.parametrize(

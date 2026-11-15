@@ -38,16 +38,20 @@
   },
   "issues": {
     "deprecated_yaml_import_issue_cannot_connect": {
-      "description": "Configuring {integration_title} using YAML is being removed, but the server could not be reached while importing your YAML configuration. Make sure the server is online and restart Home Assistant to try the import again, or remove the `{domain}` configuration from your `configuration.yaml` file and set up the integration from the UI.",
+      "description": "Configuring {integration_title} using YAML is being removed, but the server {host} could not be reached while importing your YAML configuration. Make sure the server is online and restart Home Assistant to try the import again, or remove the server from the `{domain}` configuration in your `configuration.yaml` file and set up the integration from the UI.",
       "title": "The {integration_title} YAML configuration import failed"
     },
     "deprecated_yaml_import_issue_invalid_auth": {
-      "description": "Configuring {integration_title} using YAML is being removed, but the server rejected the credentials while importing your YAML configuration. Correct the credentials and restart Home Assistant to try the import again, or remove the `{domain}` configuration from your `configuration.yaml` file and set up the integration from the UI.",
+      "description": "Configuring {integration_title} using YAML is being removed, but the server {host} rejected the credentials while importing your YAML configuration. Correct the credentials and restart Home Assistant to try the import again, or remove the server from the `{domain}` configuration in your `configuration.yaml` file and set up the integration from the UI.",
       "title": "[%key:component::zoneminder::issues::deprecated_yaml_import_issue_cannot_connect::title%]"
     },
     "deprecated_yaml_import_issue_unknown": {
-      "description": "Configuring {integration_title} using YAML is being removed, but an unexpected error occurred while importing your YAML configuration. Restart Home Assistant to try the import again, or remove the `{domain}` configuration from your `configuration.yaml` file and set up the integration from the UI.",
+      "description": "Configuring {integration_title} using YAML is being removed, but an unexpected error occurred while importing the server {host} from your YAML configuration. Restart Home Assistant to try the import again, or remove the server from the `{domain}` configuration in your `configuration.yaml` file and set up the integration from the UI.",
       "title": "[%key:component::zoneminder::issues::deprecated_yaml_import_issue_cannot_connect::title%]"
+    },
+    "deprecated_yaml_platform": {
+      "description": "ZoneMinder no longer sets up entities from the `platform: {domain}` entry in the `{platform}` section of your `configuration.yaml` file. Any settings it had are imported together with the `{domain}` configuration and can be changed in the integration options. Remove the `platform: {domain}` entry from the `{platform}` section and restart Home Assistant to fix this issue.",
+      "title": "The ZoneMinder {platform} platform YAML configuration is no longer used"
     }
   },
   "options": {

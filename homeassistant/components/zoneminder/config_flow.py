@@ -4,10 +4,8 @@ import logging
 from typing import Any, override
 
 import probatio
-from requests.exceptions import (
-    ConnectionError as RequestsConnectionError,
-    Timeout as RequestsTimeout,
-)
+from requests.exceptions import RequestException
+from yarl import URL
 
 from homeassistant.config_entries import (
     ConfigFlow,
@@ -92,6 +90,14 @@ DEFAULT_OPTIONS = {
 }
 
 
+def _move_scheme_to_ssl(data: dict[str, Any]) -> dict[str, Any]:
+    """Move a URL scheme entered in the host field to the SSL setting."""
+    url = URL(data[CONF_HOST])
+    if url.scheme not in ("http", "https") or not url.raw_authority:
+        return data
+    return {**data, CONF_HOST: url.raw_authority, CONF_SSL: url.scheme == "https"}
+
+
 class ZoneMinderConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for ZoneMinder."""
 
@@ -108,10 +114,10 @@ class ZoneMinderConfigFlow(ConfigFlow, domain=DOMAIN):
 
     async def _async_validate(self, data: dict[str, Any]) -> str | None:
         """Log in to ZoneMinder and return an error key on failure."""
-        client = create_client(data)
         try:
+            client = create_client(data)
             logged_in = await self.hass.async_add_executor_job(client.login)
-        except RequestsConnectionError, RequestsTimeout:
+        except RequestException:
             return "cannot_connect"
         except Exception:
             _LOGGER.exception("Unexpected exception")
@@ -128,6 +134,7 @@ class ZoneMinderConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
+            user_input = _move_scheme_to_ssl(user_input)
             self._async_abort_entries_match({CONF_HOST: user_input[CONF_HOST]})
             if (error := await self._async_validate(user_input)) is None:
                 return self.async_create_entry(
@@ -147,6 +154,7 @@ class ZoneMinderConfigFlow(ConfigFlow, domain=DOMAIN):
 
     async def async_step_import(self, import_data: dict[str, Any]) -> ConfigFlowResult:
         """Import a ZoneMinder server from configuration.yaml."""
+        import_data = _move_scheme_to_ssl(import_data)
         self._async_abort_entries_match({CONF_HOST: import_data[CONF_HOST]})
 
         data = {

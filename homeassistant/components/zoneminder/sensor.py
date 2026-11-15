@@ -4,11 +4,18 @@ from zoneminder.monitor import Monitor, TimePeriod
 from zoneminder.zm import ZoneMinder
 
 from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
+from homeassistant.const import CONF_MONITORED_CONDITIONS, Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.entity_platform import (
+    AddConfigEntryEntitiesCallback,
+    AddEntitiesCallback,
+)
+from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
-from . import ZoneMinderConfigEntry
+from . import ZoneMinderConfigEntry, async_create_platform_yaml_issue
 from .const import CONF_INCLUDE_ARCHIVED
+
+DEFAULT_MONITORED_CONDITIONS = ["all"]
 
 SENSOR_TYPES: tuple[SensorEntityDescription, ...] = (
     SensorEntityDescription(
@@ -17,25 +24,31 @@ SENSOR_TYPES: tuple[SensorEntityDescription, ...] = (
     ),
     SensorEntityDescription(
         key="hour",
-        entity_registry_enabled_default=False,
         name="Events Last Hour",
     ),
     SensorEntityDescription(
         key="day",
-        entity_registry_enabled_default=False,
         name="Events Last Day",
     ),
     SensorEntityDescription(
         key="week",
-        entity_registry_enabled_default=False,
         name="Events Last Week",
     ),
     SensorEntityDescription(
         key="month",
-        entity_registry_enabled_default=False,
         name="Events Last Month",
     ),
 )
+
+
+async def async_setup_platform(
+    hass: HomeAssistant,
+    config: ConfigType,
+    async_add_entities: AddEntitiesCallback,
+    discovery_info: DiscoveryInfoType | None = None,
+) -> None:
+    """Raise an issue for a leftover YAML platform section."""
+    async_create_platform_yaml_issue(hass, Platform.SENSOR)
 
 
 async def async_setup_entry(
@@ -45,12 +58,21 @@ async def async_setup_entry(
 ) -> None:
     """Set up the ZoneMinder sensor platform."""
     include_archived = entry.options[CONF_INCLUDE_ARCHIVED]
+    monitored_conditions = entry.data.get(
+        CONF_MONITORED_CONDITIONS, DEFAULT_MONITORED_CONDITIONS
+    )
 
     sensors: list[SensorEntity] = []
     for monitor in entry.runtime_data.monitors:
         sensors.append(ZMSensorMonitors(monitor, entry.entry_id))
         sensors.extend(
-            ZMSensorEvents(monitor, entry.entry_id, include_archived, description)
+            ZMSensorEvents(
+                monitor,
+                entry.entry_id,
+                include_archived,
+                description,
+                description.key in monitored_conditions,
+            )
             for description in SENSOR_TYPES
         )
     sensors.append(ZMSensorRunState(entry.runtime_data.client, entry.entry_id))
@@ -88,9 +110,11 @@ class ZMSensorEvents(SensorEntity):
         entry_id: str,
         include_archived: bool,
         description: SensorEntityDescription,
+        enabled_default: bool,
     ) -> None:
         """Initialize event sensor."""
         self.entity_description = description
+        self._attr_entity_registry_enabled_default = enabled_default
 
         self._monitor = monitor
         self._include_archived = include_archived
