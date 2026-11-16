@@ -973,19 +973,20 @@
           "ai_rinse": "AI rinse",
           "ai_spin": "AI spin",
           "ai_wash": "AI wash",
-          "air_wash": "[%key:component::smartthings::entity::sensor::dishwasher_job_state::state::air_wash%]",
-          "cooling": "[%key:component::smartthings::entity::sensor::dishwasher_job_state::state::cooling%]",
+          "air_wash": "Air wash",
+          "cooling": "Cooling",
           "delay_wash": "Delay wash",
-          "drying": "[%key:component::smartthings::entity::sensor::dishwasher_job_state::state::drying%]",
-          "finish": "[%key:component::smartthings::entity::sensor::dishwasher_job_state::state::finish%]",
+          "drying": "Drying",
+          "finish": "Finish",
           "freeze_protection": "Freeze protection",
           "none": "None",
-          "pre_wash": "[%key:component::smartthings::entity::sensor::dishwasher_job_state::state::pre_wash%]",
-          "rinse": "[%key:component::smartthings::entity::sensor::dishwasher_job_state::state::rinse%]",
-          "spin": "[%key:component::smartthings::entity::sensor::dishwasher_job_state::state::spin%]",
-          "wash": "[%key:component::smartthings::entity::sensor::dishwasher_job_state::state::wash%]",
+          "pre_wash": "Pre-wash",
+          "rinse": "Rinse",
+          "spin": "Spin",
+          "wash": "Wash",
           "weight_sensing": "Weight sensing",
-          "wrinkle_prevent": "[%key:component::smartthings::entity::sensor::dishwasher_job_state::state::wrinkle_prevent%]"
+          "wrinkle_prevent": "Wrinkle prevention"
+      }
         }
       },
       "washer_machine_state": {
